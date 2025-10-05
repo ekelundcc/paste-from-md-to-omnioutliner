@@ -1,0 +1,81 @@
+/*{
+    "author": "Fredrik Ekelund",
+    "targets": ["omnioutliner"],
+    "type": "action",
+    "identifier": "com.mycompany.paste-from-md",
+    "version": "0.1",
+    "description": "Importerar Markdown från clipboard till OmniOutliner struktur",
+    "label": "Paste from Markdown",
+    "mediumLabel": "Paste from Markdown",
+    "longLabel": "Paste Markdown from Clipboard",
+    "paletteLabel": "Paste MD",
+}*/
+(() => {
+    var action = new PlugIn.Action(function(selection) {
+        const markdown = Pasteboard.general.string;
+        
+        if (!markdown || markdown.length === 0) {
+            return;
+        }
+        
+        const lines = markdown.split('\n');
+        const rootItem = document.outline.rootItem;
+        const noteColumn = document.outline.noteColumn;
+        
+        let currentParents = [rootItem];
+        let currentLevel = 0;
+        let noteBuffer = '';
+        let lastItem = null;
+        
+        lines.forEach(line => {
+            // Kolla om det är en rubrik
+            const headerMatch = line.match(/^(#{1,6})\s+(.+)$/);
+            
+            if (headerMatch) {
+                // Spara eventuell note till föregående item
+                if (lastItem && noteBuffer.trim().length > 0) {
+                    lastItem.setValueForColumn(noteBuffer.trim(), noteColumn);
+                    noteBuffer = '';
+                }
+                
+                const level = headerMatch[1].length;
+                let topic = headerMatch[2];
+                
+                // Ta bort numrering om den finns (1, 1.1, etc)
+                topic = topic.replace(/^[\d.]+\s+/, '');
+                
+                // Justera parent-arrayen baserat på nivå
+                while (currentParents.length > level) {
+                    currentParents.pop();
+                }
+                
+                const parent = currentParents[currentParents.length - 1];
+                const newItem = parent.addChild(null, (item) => {
+                    item.topic = topic;
+                });
+                
+                currentParents.push(newItem);
+                currentLevel = level;
+                lastItem = newItem;
+                
+            } else if (line.trim().length > 0) {
+                // Lägg till i note-buffer
+                noteBuffer += (noteBuffer.length > 0 ? '\n' : '') + line;
+            } else if (noteBuffer.trim().length > 0) {
+                // Tom rad - lägg till en extra newline i bufferten
+                noteBuffer += '\n';
+            }
+        });
+        
+        // Spara eventuell kvarvarande note
+        if (lastItem && noteBuffer.trim().length > 0) {
+            lastItem.setValueForColumn(noteBuffer.trim(), noteColumn);
+        }
+    });
+    
+    action.validate = function(selection){
+        return Pasteboard.general.hasStrings;
+    };
+        
+    return action;
+})();
